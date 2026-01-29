@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Zombie War 3D</title>
+<style>
+body{
+ margin:0;
+ overflow:hidden;
+ background:black;
+ font-family:Arial;
+}
+
+/* ===== MENU ===== */
+#menu{
+ position:fixed;
+ inset:0;
+ background:linear-gradient(#111,#000);
+ display:flex;
+ flex-direction:column;
+ justify-content:center;
+ align-items:center;
+ color:white;
+ z-index:100;
+}
+
+#menu h1{
+ font-size:48px;
+ color:#2ecc71;
+ margin-bottom:20px;
+}
+
+.menu-btn{
+ width:240px;
+ padding:15px;
+ margin:10px;
+ font-size:18px;
+ border:none;
+ border-radius:8px;
+ cursor:pointer;
+ background:#2ecc71;
+ color:black;
+ transition:.2s;
+}
+.menu-btn:hover{
+ background:#27ae60;
+}
+
+/* ===== HUD ===== */
+#hud{
+ position:fixed;
+ top:10px;left:10px;
+ color:white;
+ background:rgba(0,0,0,.6);
+ padding:10px;
+ border-radius:6px;
+ display:none;
+ z-index:10;
+}
+
+/* ===== CROSSHAIR ===== */
+#crosshair{
+ position:fixed;
+ top:50%;
+ left:50%;
+ width:24px;
+ height:24px;
+ transform:translate(-50%,-50%);
+ pointer-events:none;
+ display:none;
+ z-index:20;
+}
+#crosshair::before,
+#crosshair::after{
+ content:"";
+ position:absolute;
+ background:white;
+}
+#crosshair::before{
+ width:2px;
+ height:24px;
+ left:11px;
+ top:0;
+}
+#crosshair::after{
+ width:24px;
+ height:2px;
+ left:0;
+ top:11px;
+}
+</style>
+</head>
+<body>
+
+<div id="menu">
+ <h1>ZOMBIE WAR 3D</h1>
+ <button class="menu-btn" onclick="startGame()">▶ Mulai Game</button>
+</div>
+
+
+<input id="roomInput" placeholder="Masukkan Room ID teman"
+style="padding:10px;margin:10px;width:240px;border-radius:6px;border:none;">
+
+<button class="menu-btn" onclick="createRoom()">Buat Room</button>
+<button class="menu-btn" onclick="joinRoom()">Gabung Room</button>
+
+<div id="roomIdText" style="margin-top:10px;color:#2ecc71"></div>
+
+
+<div id="hud">
+WASD : Gerak<br>
+SPASI : Lompat<br>
+Mouse : Kamera<br>
+Klik : Tembak<br>
+ESC : Menu
+</div>
+
+<div id="crosshair"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152/build/three.min.js"></script>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+
+<script>
+/* ===== GAME STATE ===== */
+let gameStarted=false;
+function startGame(){
+ menu.style.display="none";
+ hud.style.display="block";
+ crosshair.style.display="block";
+ gameStarted=true;
+ renderer.domElement.requestPointerLock();
+}
+
+document.addEventListener("pointerlockchange",()=>{
+ if(document.pointerLockElement!==renderer.domElement){
+  gameStarted=false;
+  menu.style.display="flex";
+  hud.style.display="none";
+  crosshair.style.display="none";
+ }
+});
+
+/* ===== SCENE ===== */
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x222222);
+
+const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,1000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff,0.6));
+const light=new THREE.DirectionalLight(0xffffff,1);
+light.position.set(10,20,10);
+scene.add(light);
+
+/* ===== GROUND ===== */
+const ground=new THREE.Mesh(
+ new THREE.PlaneGeometry(300,300),
+ new THREE.MeshStandardMaterial({color:0x333333})
+);
+ground.rotation.x=-Math.PI/2;
+scene.add(ground);
+
+/* ===== PLAYER (GLADIATOR SKIN) ===== */
+const player = new THREE.Group();
+
+/* ===== HELM ===== */
+const helmet = new THREE.Mesh(
+ new THREE.CylinderGeometry(0.55,0.6,0.9,16),
+ new THREE.MeshStandardMaterial({color:0xd4af37}) // emas
+);
+helmet.position.y = 2.6;
+player.add(helmet);
+
+/* Crest helm */
+const crest = new THREE.Mesh(
+ new THREE.BoxGeometry(0.15,0.5,0.8),
+ new THREE.MeshStandardMaterial({color:0xaa0000})
+);
+crest.position.set(0,3.0,0);
+player.add(crest);
+
+/* ===== HEAD ===== */
+const head = new THREE.Mesh(
+ new THREE.BoxGeometry(0.8,0.8,0.8),
+ new THREE.MeshStandardMaterial({color:0xffccaa})
+);
+head.position.y = 2.2;
+player.add(head);
+
+/* ===== BODY ARMOR ===== */
+const body = new THREE.Mesh(
+ new THREE.BoxGeometry(1.4,1.6,0.8),
+ new THREE.MeshStandardMaterial({color:0x8e5a2b}) // perunggu
+);
+body.position.y = 1.4;
+player.add(body);
+
+/* ===== ARMS ===== */
+const armMat = new THREE.MeshStandardMaterial({color:0x8e5a2b});
+
+const armL = new THREE.Mesh(
+ new THREE.BoxGeometry(0.45,1.5,0.45),
+ armMat
+);
+armL.position.set(-1.0,1.5,0);
+player.add(armL);
+
+const armR = armL.clone();
+armR.position.x = 1.0;
+player.add(armR);
+
+/* ===== SENJATA ===== */
+const gun = new THREE.Mesh(
+ new THREE.BoxGeometry(0.9,0.35,0.35),
+ new THREE.MeshStandardMaterial({color:0x111111})
+);
+gun.position.set(0,-0.4,0.7);
+armR.add(gun);
+
+/* ===== LEGS (GREAVES) ===== */
+const legMat = new THREE.MeshStandardMaterial({color:0x666666});
+
+const legL = new THREE.Mesh(
+ new THREE.BoxGeometry(0.5,1.6,0.5),
+ legMat
+);
+legL.position.set(-0.35,0.2,0);
+player.add(legL);
+
+const legR = legL.clone();
+legR.position.x = 0.35;
+player.add(legR);
+
+scene.add(player);
+
+
+/* ===== CAMERA ===== */
+let yaw=0,pitch=0;
+document.addEventListener("mousemove",e=>{
+ if(!gameStarted) return;
+ yaw   -= e.movementX*0.004;
+ pitch -= e.movementY*0.004;
+ pitch=Math.max(-1.3,Math.min(1.3,pitch));
+});
+
+
+
+
+/* ===== MOVEMENT ===== */
+const keys={};
+let velY=0,grounded=true;
+const gravity=-0.02;
+const jump=0.55;
+
+document.addEventListener("keydown",e=>{
+ keys[e.code]=true;
+ if(e.code==="Space" && grounded){
+  velY=jump;
+  grounded=false;
+ }
+});
+document.addEventListener("keyup",e=>keys[e.code]=false);
+
+/* ===== OBSTACLES ===== */
+const obstacles=[];
+for(let i=0;i<15;i++){
+ const o=new THREE.Mesh(
+  new THREE.BoxGeometry(5,5,5),
+  new THREE.MeshStandardMaterial({color:0x7f8c8d})
+ );
+ o.position.set(Math.random()*120-60,2.5,Math.random()*120-60);
+ obstacles.push(o);
+ scene.add(o);
+}
+
+/* ===== ZOMBIES ===== */
+const zombies=[];
+const zombieCount=8;
+
+function spawnZombie(){
+ const zombie = new THREE.Group();
+
+ /* Kepala */
+ const head = new THREE.Mesh(
+  new THREE.BoxGeometry(1,1,1),
+  new THREE.MeshStandardMaterial({color:0x6ab04c})
+ );
+ head.position.y = 2.5;
+ zombie.add(head);
+
+ /* Badan */
+ const body = new THREE.Mesh(
+  new THREE.BoxGeometry(1.2,1.5,0.6),
+  new THREE.MeshStandardMaterial({color:0x27ae60})
+ );
+ body.position.y = 1.5;
+ zombie.add(body);
+
+ /* Tangan kiri */
+ const armL = new THREE.Mesh(
+  new THREE.BoxGeometry(0.4,1.4,0.4),
+  new THREE.MeshStandardMaterial({color:0x6ab04c})
+ );
+ armL.position.set(-0.9,1.5,0);
+ zombie.add(armL);
+
+ /* Tangan kanan */
+ const armR = armL.clone();
+ armR.position.x = 0.9;
+ zombie.add(armR);
+
+ /* Kaki kiri */
+ const legL = new THREE.Mesh(
+  new THREE.BoxGeometry(0.45,1.5,0.45),
+  new THREE.MeshStandardMaterial({color:0x145a32})
+ );
+ legL.position.set(-0.3,0.25,0);
+ zombie.add(legL);
+
+ /* Kaki kanan */
+ const legR = legL.clone();
+ legR.position.x = 0.3;
+ zombie.add(legR);
+
+ zombie.position.set(
+  Math.random()*80-40,
+  0,
+  Math.random()*80-40
+ );
+
+ /* Simpan referensi buat animasi */
+ zombie.userData = {
+  parts: [head, body, armL, armR, legL, legR],
+  armL, armR, legL, legR,
+  walkOffset: Math.random()*Math.PI*2
+};
+
+ zombies.push(zombie);
+ scene.add(zombie);
+}
+
+
+for(let i=0;i<zombieCount;i++) spawnZombie();
+
+/* ===== BULLETS ===== */
+const bullets=[];
+const bulletGravity=-0.01;
+
+document.addEventListener("click",()=>{
+ if(!gameStarted) return;
+
+ const b=new THREE.Mesh(
+  new THREE.SphereGeometry(0.15,8,8),
+  new THREE.MeshBasicMaterial({color:0xff0000})
+ );
+gun.getWorldPosition(b.position);
+
+
+ const speed=0.9;
+ b.velocity=new THREE.Vector3(
+  Math.sin(yaw)*Math.cos(pitch)*speed,
+  Math.sin(pitch)*speed,
+  Math.cos(yaw)*Math.cos(pitch)*speed
+ );
+
+ bullets.push(b);
+ scene.add(b);
+});
+
+
+
+/* =========================
+   P2P MULTIPLAYER
+========================= */
+
+let peer;
+let conn;
+let otherPlayer;
+
+/* Buat player lain */
+function createOtherPlayer(){
+ const mat = new THREE.MeshStandardMaterial({color:0x3498db});
+ const mesh = new THREE.Mesh(
+   new THREE.BoxGeometry(1,2,1),
+   mat
+ );
+ scene.add(mesh);
+ return mesh;
+}
+
+/* CREATE ROOM */
+function createRoom(){
+
+ peer = new Peer();
+
+ peer.on("open",(id)=>{
+   document.getElementById("roomIdText").innerHTML =
+   "ROOM ID:<br><b>"+id+"</b><br>Kirim ke teman!";
+ });
+
+ peer.on("connection",(connection)=>{
+   conn = connection;
+
+   otherPlayer = createOtherPlayer();
+
+   conn.on("data",(data)=>{
+     otherPlayer.position.set(data.x,data.y,data.z);
+     otherPlayer.rotation.y = data.rot;
+   });
+
+ });
+
+}
+
+/* JOIN ROOM */
+function joinRoom(){
+
+ const roomId = document.getElementById("roomInput").value;
+
+ peer = new Peer();
+
+ peer.on("open",()=>{
+   conn = peer.connect(roomId);
+
+   otherPlayer = createOtherPlayer();
+
+   conn.on("data",(data)=>{
+     otherPlayer.position.set(data.x,data.y,data.z);
+     otherPlayer.rotation.y = data.rot;
+   });
+ });
+
+}
+
+
+
+/* ===== GAME LOOP ===== */
+function animate(){
+ requestAnimationFrame(animate);
+
+ if(!gameStarted){
+  renderer.render(scene,camera);
+  return;
+ }
+
+ const dir=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+ const speed=0.15;
+ const oldPos=player.position.clone();
+
+ if(keys["KeyW"]) player.position.add(dir.clone().multiplyScalar(speed));
+ if(keys["KeyS"]) player.position.add(dir.clone().multiplyScalar(-speed));
+
+ const right=new THREE.Vector3(dir.z,0,-dir.x);
+ if(keys["KeyA"]) player.position.add(right.multiplyScalar(speed));
+ if(keys["KeyD"]) player.position.add(right.multiplyScalar(-speed));
+
+ obstacles.forEach(o=>{
+  if(player.position.distanceTo(o.position)<4)
+   player.position.copy(oldPos);
+ });
+
+ velY+=gravity;
+ player.position.y+=velY;
+ if(player.position.y<=0){
+  player.position.y=0;
+  velY=0;
+  grounded=true;
+ }
+
+ camera.position.set(
+  player.position.x - Math.sin(yaw)*6,
+  player.position.y + 4,
+  player.position.z - Math.cos(yaw)*6
+ );
+ camera.lookAt(
+  player.position.x + Math.sin(yaw)*10,
+  player.position.y + 2 + Math.sin(pitch)*10,
+  player.position.z + Math.cos(yaw)*10
+ );
+
+
+ player.rotation.y = yaw;
+head.rotation.x = pitch * 0.6;
+
+gun.rotation.x = -pitch * 0.6;
+
+
+ /* ===== BULLETS ===== */
+ bullets.forEach((b,i)=>{
+  b.velocity.y+=bulletGravity;
+  b.position.add(b.velocity);
+  if(b.position.y<0){
+   scene.remove(b);
+   bullets.splice(i,1);
+  }
+ });
+
+ /* ===== ZOMBIE AI + HIT ===== */
+ zombies.forEach((z,zi)=>{
+ const d = player.position.clone().sub(z.position);
+ if(d.length() < 50){
+  d.y = 0;
+  d.normalize();
+  z.position.add(d.multiplyScalar(0.05));
+  z.rotation.y = Math.atan2(d.x, d.z);
+ }
+
+ /* Animasi jalan */
+ const t = performance.now()*0.005 + z.userData.walkOffset;
+ z.userData.armL.rotation.x = Math.sin(t)*0.6;
+ z.userData.armR.rotation.x = -Math.sin(t)*0.6;
+ z.userData.legL.rotation.x = -Math.sin(t)*0.6;
+ z.userData.legR.rotation.x = Math.sin(t)*0.6;
+
+ /* ===== HIT DETECTION SEMUA BAGIAN ===== */
+ bullets.forEach((b,bi)=>{
+  let hit = false;
+
+  z.userData.parts.forEach(part=>{
+   const p = new THREE.Vector3();
+   part.getWorldPosition(p);
+   if(b.position.distanceTo(p) < 0.6){
+    hit = true;
+   }
+  });
+
+  if(hit){
+   scene.remove(z);
+   scene.remove(b);
+   zombies.splice(zi,1);
+   bullets.splice(bi,1);
+
+   setTimeout(spawnZombie,10000);
+  }
+ });
+});
+
+
+
+
+ const walking = keys["KeyW"] || keys["KeyA"] || keys["KeyS"] || keys["KeyD"];
+const time = performance.now() * 0.005;
+
+if(walking){
+ armL.rotation.x = Math.sin(time) * 0.6;
+ armR.rotation.x = -Math.sin(time) * 0.6;
+ legL.rotation.x = -Math.sin(time) * 0.6;
+ legR.rotation.x = Math.sin(time) * 0.6;
+}else{
+ armL.rotation.x = armR.rotation.x = 0;
+ legL.rotation.x = legR.rotation.x = 0;
+}
+
+/* KIRIM POSISI 10x per detik */
+if(conn && conn.open){
+
+ if(!window.lastSend) window.lastSend=0;
+
+ if(performance.now()-lastSend > 100){
+
+   conn.send({
+     x:player.position.x,
+     y:player.position.y,
+     z:player.position.z,
+     rot:player.rotation.y
+   });
+
+   lastSend = performance.now();
+ }
+}
+
+
+ renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener("resize",()=>{
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+
+</body>
+</html>
