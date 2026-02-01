@@ -166,78 +166,83 @@ const ground=new THREE.Mesh(
 ground.rotation.x=-Math.PI/2;
 scene.add(ground);
 
-/* ===== PLAYER (GLADIATOR SKIN) ===== */
-const player = new THREE.Group();
 
-/* ===== HELM ===== */
-const helmet = new THREE.Mesh(
- new THREE.CylinderGeometry(0.55,0.6,0.9,16),
- new THREE.MeshStandardMaterial({color:0xd4af37}) // emas
-);
-helmet.position.y = 2.6;
-player.add(helmet);
+function createGladiator(color = 0x8e5a2b){
+  const player = new THREE.Group();
 
-/* Crest helm */
-const crest = new THREE.Mesh(
- new THREE.BoxGeometry(0.15,0.5,0.8),
- new THREE.MeshStandardMaterial({color:0xaa0000})
-);
-crest.position.set(0,3.0,0);
-player.add(crest);
+  const helmet = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55,0.6,0.9,16),
+    new THREE.MeshStandardMaterial({color:0xd4af37})
+  );
+  helmet.position.y = 2.6;
+  player.add(helmet);
 
-/* ===== HEAD ===== */
-const head = new THREE.Mesh(
- new THREE.BoxGeometry(0.8,0.8,0.8),
- new THREE.MeshStandardMaterial({color:0xffccaa})
-);
-head.position.y = 2.2;
-player.add(head);
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8,0.8,0.8),
+    new THREE.MeshStandardMaterial({color:0xffccaa})
+  );
+  head.position.y = 2.2;
+  player.add(head);
 
-/* ===== BODY ARMOR ===== */
-const body = new THREE.Mesh(
- new THREE.BoxGeometry(1.4,1.6,0.8),
- new THREE.MeshStandardMaterial({color:0x8e5a2b}) // perunggu
-);
-body.position.y = 1.4;
-player.add(body);
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4,1.6,0.8),
+    new THREE.MeshStandardMaterial({color})
+  );
+  body.position.y = 1.4;
+  player.add(body);
 
-/* ===== ARMS ===== */
-const armMat = new THREE.MeshStandardMaterial({color:0x8e5a2b});
+  const armMat = new THREE.MeshStandardMaterial({color});
 
-const armL = new THREE.Mesh(
- new THREE.BoxGeometry(0.45,1.5,0.45),
- armMat
-);
-armL.position.set(-1.0,1.5,0);
-player.add(armL);
+  const armL = new THREE.Mesh(
+    new THREE.BoxGeometry(0.45,1.5,0.45),
+    armMat
+  );
+  armL.position.set(-1.0,1.5,0);
+  player.add(armL);
 
-const armR = armL.clone();
-armR.position.x = 1.0;
-player.add(armR);
+  const armR = armL.clone();
+  armR.position.x = 1.0;
+  player.add(armR);
 
-/* ===== SENJATA ===== */
 const gun = new THREE.Mesh(
- new THREE.BoxGeometry(0.9,0.35,0.35),
- new THREE.MeshStandardMaterial({color:0x111111})
+  new THREE.BoxGeometry(0.9,0.35,0.35),
+  new THREE.MeshStandardMaterial({color:0x111111})
 );
 gun.position.set(0,-0.4,0.7);
 armR.add(gun);
 
-/* ===== LEGS (GREAVES) ===== */
-const legMat = new THREE.MeshStandardMaterial({color:0x666666});
+  const legMat = new THREE.MeshStandardMaterial({color:0x666666});
 
-const legL = new THREE.Mesh(
- new THREE.BoxGeometry(0.5,1.6,0.5),
- legMat
-);
-legL.position.set(-0.35,0.2,0);
-player.add(legL);
+  const legL = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5,1.6,0.5),
+    legMat
+  );
+  legL.position.set(-0.35,0.2,0);
+  player.add(legL);
 
-const legR = legL.clone();
-legR.position.x = 0.35;
-player.add(legR);
+  const legR = legL.clone();
+  legR.position.x = 0.35;
+  player.add(legR);
 
+player.userData = {
+  head,
+  armL,
+  armR,
+  legL,
+  legR,
+  gun
+};
+
+  return player;
+}
+
+
+
+/* Buat player */
+const player = createGladiator();
 scene.add(player);
+
+
 
 
 /* ===== CAMERA ===== */
@@ -359,7 +364,7 @@ document.addEventListener("click",()=>{
   new THREE.SphereGeometry(0.15,8,8),
   new THREE.MeshBasicMaterial({color:0xff0000})
  );
-gun.getWorldPosition(b.position);
+player.userData.gun.getWorldPosition(b.position);
 
 
  const speed=0.9;
@@ -385,14 +390,10 @@ let otherPlayer;
 
 /* Buat player lain */
 function createOtherPlayer(){
-  const mat = new THREE.MeshStandardMaterial({color:0x3498db});
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(1,2,1),
-    mat
-  );
-  mesh.position.y = 1; // 👈 penting
-  scene.add(mesh);
-  return mesh;
+  const other = createGladiator(0x3498db); // warna biru
+  other.position.set(0,0,-5);
+  scene.add(other);
+  return other;
 }
 
 /* CREATE ROOM */
@@ -512,9 +513,25 @@ function animate(){
 
 
  player.rotation.y = yaw;
-head.rotation.x = pitch * 0.6;
+player.userData.head.rotation.x = pitch * 0.6;
 
-gun.rotation.x = -pitch * 0.6;
+player.userData.gun.rotation.x = -pitch * 0.6;
+
+
+const walking = keys["KeyW"] || keys["KeyA"] || keys["KeyS"] || keys["KeyD"];
+const time = performance.now() * 0.005;
+
+const p = player.userData;
+
+if(walking){
+ p.armL.rotation.x = Math.sin(time) * 0.6;
+ p.armR.rotation.x = -Math.sin(time) * 0.6;
+ p.legL.rotation.x = -Math.sin(time) * 0.6;
+ p.legR.rotation.x = Math.sin(time) * 0.6;
+}else{
+ p.armL.rotation.x = p.armR.rotation.x = 0;
+ p.legL.rotation.x = p.legR.rotation.x = 0;
+}
 
 
  /* ===== BULLETS ===== */
@@ -570,18 +587,7 @@ gun.rotation.x = -pitch * 0.6;
 
 
 
- const walking = keys["KeyW"] || keys["KeyA"] || keys["KeyS"] || keys["KeyD"];
-const time = performance.now() * 0.005;
-
-if(walking){
- armL.rotation.x = Math.sin(time) * 0.6;
- armR.rotation.x = -Math.sin(time) * 0.6;
- legL.rotation.x = -Math.sin(time) * 0.6;
- legR.rotation.x = Math.sin(time) * 0.6;
-}else{
- armL.rotation.x = armR.rotation.x = 0;
- legL.rotation.x = legR.rotation.x = 0;
-}
+ 
 
 /* KIRIM POSISI 10x per detik */
 if(conn && conn.open){
