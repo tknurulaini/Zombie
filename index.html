@@ -127,6 +127,13 @@ ESC : Menu
 <script>
 /* ===== GAME STATE ===== */
 let gameStarted=false;
+
+let peer;
+let conn;
+let otherPlayer;
+let isHost = false;
+
+
 function startGame(){
  menu.style.display="none";
  hud.style.display="block";
@@ -351,7 +358,7 @@ function spawnZombie(){
 }
 
 
-for(let i=0;i<zombieCount;i++) spawnZombie();
+
 
 /* ===== BULLETS ===== */
 const bullets=[];
@@ -384,9 +391,8 @@ player.userData.gun.getWorldPosition(b.position);
    P2P MULTIPLAYER
 ========================= */
 
-let peer;
-let conn;
-let otherPlayer;
+
+
 
 /* Buat player lain */
 function createOtherPlayer(){
@@ -398,6 +404,9 @@ function createOtherPlayer(){
 
 /* CREATE ROOM */
 function createRoom(){
+  isHost = true; // <== HOST
+  
+  for(let i=0;i<zombieCount;i++) spawnZombie();
 
  peer = new Peer("room-"+Math.floor(Math.random()*9999),{
  config:{
@@ -426,16 +435,36 @@ function createRoom(){
   });
 
   conn.on("data",(data)=>{
-    if(!otherPlayer) return;
-    otherPlayer.position.set(data.x, data.y, data.z);
+
+  // === PLAYER LAIN ===
+  if(data.x !== undefined){
+    otherPlayer.position.set(data.x,data.y,data.z);
     otherPlayer.rotation.y = data.rot;
-  });
+    return;
+  }
+
+  // === ZOMBIE DARI HOST ===
+  if(data.type === "zombies"){
+
+    while(zombies.length < data.zombies.length){
+      spawnZombie();
+    }
+
+    data.zombies.forEach((z,i)=>{
+      if(zombies[i]){
+        zombies[i].position.set(z.x,z.y,z.z);
+        zombies[i].rotation.y = z.rot;
+      }
+    });
+  }
+});
 });
 
 }
 
 /* JOIN ROOM */
 function joinRoom(){
+  isHost = false; // <== CLIENT
 
  const roomId = document.getElementById("roomInput").value;
 
@@ -545,7 +574,8 @@ if(walking){
  });
 
  /* ===== ZOMBIE AI + HIT ===== */
- zombies.forEach((z,zi)=>{
+ zombies.forEach((z, zi) => {
+      if (!isHost) return;
  const d = player.position.clone().sub(z.position);
  if(d.length() < 50){
   d.y = 0;
@@ -605,6 +635,22 @@ if(conn && conn.open){
 
    lastSend = performance.now();
  }
+}
+
+
+if(conn && conn.open && isHost){
+
+  const zombieData = zombies.map(z=>({
+    x: z.position.x,
+    y: z.position.y,
+    z: z.position.z,
+    rot: z.rotation.y
+  }));
+
+  conn.send({
+    type: "zombies",
+    zombies: zombieData
+  });
 }
 
 
