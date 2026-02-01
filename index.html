@@ -95,16 +95,18 @@ body{
 <div id="menu">
  <h1>ZOMBIE WAR 3D</h1>
  <button class="menu-btn" onclick="startGame()">▶ Mulai Game</button>
-</div>
-
-
-<input id="roomInput" placeholder="Masukkan Room ID teman"
+ 
+ <input id="roomInput" placeholder="Masukkan Room ID teman"
 style="padding:10px;margin:10px;width:240px;border-radius:6px;border:none;">
 
 <button class="menu-btn" onclick="createRoom()">Buat Room</button>
 <button class="menu-btn" onclick="joinRoom()">Gabung Room</button>
 
 <div id="roomIdText" style="margin-top:10px;color:#2ecc71"></div>
+</div>
+
+
+
 
 
 <div id="hud">
@@ -383,19 +385,31 @@ let otherPlayer;
 
 /* Buat player lain */
 function createOtherPlayer(){
- const mat = new THREE.MeshStandardMaterial({color:0x3498db});
- const mesh = new THREE.Mesh(
-   new THREE.BoxGeometry(1,2,1),
-   mat
- );
- scene.add(mesh);
- return mesh;
+  const mat = new THREE.MeshStandardMaterial({color:0x3498db});
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(1,2,1),
+    mat
+  );
+  mesh.position.y = 1; // 👈 penting
+  scene.add(mesh);
+  return mesh;
 }
 
 /* CREATE ROOM */
 function createRoom(){
 
- peer = new Peer();
+ peer = new Peer("room-"+Math.floor(Math.random()*9999),{
+ config:{
+   iceServers:[
+     { urls:"stun:stun.l.google.com:19302" },
+     {
+       urls:"turn:openrelay.metered.ca:80",
+       username:"openrelayproject",
+       credential:"openrelayproject"
+     }
+   ]
+ }
+});
 
  peer.on("open",(id)=>{
    document.getElementById("roomIdText").innerHTML =
@@ -403,16 +417,19 @@ function createRoom(){
  });
 
  peer.on("connection",(connection)=>{
-   conn = connection;
+  conn = connection;
+  otherPlayer = createOtherPlayer();
 
-   otherPlayer = createOtherPlayer();
+  conn.on("open",()=>{
+    console.log("Player terhubung");
+  });
 
-   conn.on("data",(data)=>{
-     otherPlayer.position.set(data.x,data.y,data.z);
-     otherPlayer.rotation.y = data.rot;
-   });
-
- });
+  conn.on("data",(data)=>{
+    if(!otherPlayer) return;
+    otherPlayer.position.set(data.x, data.y, data.z);
+    otherPlayer.rotation.y = data.rot;
+  });
+});
 
 }
 
@@ -421,7 +438,18 @@ function joinRoom(){
 
  const roomId = document.getElementById("roomInput").value;
 
- peer = new Peer();
+ peer = new Peer({
+   config:{
+     iceServers:[
+       { urls:"stun:stun.l.google.com:19302" },
+       {
+         urls:"turn:openrelay.metered.ca:80",
+         username:"openrelayproject",
+         credential:"openrelayproject"
+       }
+     ]
+   }
+ });
 
  peer.on("open",()=>{
    conn = peer.connect(roomId);
